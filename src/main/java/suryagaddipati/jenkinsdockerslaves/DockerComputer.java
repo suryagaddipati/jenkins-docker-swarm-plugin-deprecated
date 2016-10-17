@@ -87,7 +87,7 @@ public class DockerComputer extends AbstractCloudComputer<DockerSlave> {
     private void cleanupNode(final PrintStream logger) throws IOException, InterruptedException {
         if (getNode() != null) {
             logger.println("Removing node " + getNode().getDisplayName());
-            getNode().terminate();
+            getNode().terminateWithoutQueueLock();
         }
     }
 
