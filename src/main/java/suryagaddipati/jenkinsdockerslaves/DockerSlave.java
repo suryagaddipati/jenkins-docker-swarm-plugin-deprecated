@@ -25,6 +25,7 @@
 
 package suryagaddipati.jenkinsdockerslaves;
 
+import hudson.model.Computer;
 import hudson.model.Descriptor;
 import hudson.model.Label;
 import hudson.model.Node;
@@ -34,15 +35,18 @@ import hudson.model.queue.CauseOfBlockage;
 import hudson.slaves.AbstractCloudSlave;
 import hudson.slaves.EphemeralNode;
 import hudson.slaves.NodeProperty;
+import hudson.slaves.OfflineCause;
 import hudson.slaves.RetentionStrategy;
+import hudson.util.StreamTaskListener;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.Collections;
 
 public class DockerSlave extends AbstractCloudSlave implements EphemeralNode {
 
 
-    public DockerSlave(Queue.BuildableItem bi, String labelString) throws Descriptor.FormException, IOException {
+    public DockerSlave(final Queue.BuildableItem bi, final String labelString) throws Descriptor.FormException, IOException {
         super(labelString, "Container slave for building " + bi.task.getFullDisplayName(),
                 "/home/jenkins", 1, Mode.EXCLUSIVE, labelString,
                 new DockerComputerLauncher(bi),
@@ -55,7 +59,7 @@ public class DockerSlave extends AbstractCloudSlave implements EphemeralNode {
     }
 
     @Override
-    protected void _terminate(TaskListener listener) throws IOException, InterruptedException {
+    protected void _terminate(final TaskListener listener) throws IOException, InterruptedException {
     }
 
 
@@ -70,12 +74,26 @@ public class DockerSlave extends AbstractCloudSlave implements EphemeralNode {
     }
 
     @Override
-    public CauseOfBlockage canTake(Queue.BuildableItem item) {
-        Label l = item.getAssignedLabel();
-        if(l != null && this.name.equals(l.getName())){
+    public CauseOfBlockage canTake(final Queue.BuildableItem item) {
+        final Label l = item.getAssignedLabel();
+        if (l != null && this.name.equals(l.getName())) {
             return null;
         }
         return super.canTake(item);
+    }
+
+    public void terminateWithoutQueueLock() throws IOException, InterruptedException {
+        final Computer computer = toComputer();
+        if (computer != null) {
+            computer.recordTermination();
+            computer.disconnect(OfflineCause.create(hudson.model.Messages._Hudson_NodeBeingRemoved()));
+        }
+        try {
+            // TODO: send the output to somewhere real
+            _terminate(new StreamTaskListener(System.out, Charset.defaultCharset()));
+        } finally {
+            JenkinsHacks.removeNodeWithoutQueueLock(this);
+        }
     }
 }
 
