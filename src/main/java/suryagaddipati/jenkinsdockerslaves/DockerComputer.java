@@ -30,18 +30,22 @@ import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.Statistics;
 import com.google.common.collect.Iterables;
+import hudson.model.Computer;
 import hudson.model.Executor;
+import hudson.model.Node;
 import hudson.model.Queue;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.remoting.Channel;
 import hudson.slaves.AbstractCloudComputer;
+import hudson.slaves.SlaveComputer;
 import hudson.util.StreamTaskListener;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -167,6 +171,20 @@ public class DockerComputer extends AbstractCloudComputer<DockerSlave> {
         ExceptionHandlingHelpers.executeWithRetryOnError(() -> dockerClient.removeContainerCmd(containerId).withForce(true).exec());
         logger.println("Removed Container " + containerId);
     }
+
+    protected void setNode(final Node node) {
+        this.nodeName = node.getNodeName();
+        addOneExecutor();
+        JenkinsHacks.setPrivateField(SlaveComputer.class, "launcher", this, grabLauncher(node));
+
+    }
+
+    private void addOneExecutor() {
+        final Executor e = new LockFreeExecutor(this, 0);
+        final List executors = (List) JenkinsHacks.getPrivateField(Computer.class, "executors", this);
+        executors.add(e);
+    }
+
 
     @Override
     public void recordTermination() {

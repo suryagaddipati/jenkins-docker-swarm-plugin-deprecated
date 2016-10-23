@@ -63,4 +63,26 @@ public class JenkinsHacks {
         }
 
     }
+
+    public static void setPrivateField(final Class clazz, final String fieldName, final Object target, final Object value) {
+        try {
+            final Field field = clazz.getDeclaredField(fieldName);
+            field.setAccessible(true);
+            ReflectionUtils.setField(field, target, value);
+        } catch (final NoSuchFieldException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static Object getPrivateField(final Class clazz, final String fieldName, final Object target) {
+        try {
+
+            final Field field = clazz.getDeclaredField(fieldName);
+            field.setAccessible(true);
+            return ReflectionUtils.getField(field, target);
+        } catch (final NoSuchFieldException e) {
+            throw new RuntimeException(e);
+        }
+
+    }
 }
