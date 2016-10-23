@@ -9,6 +9,7 @@ import org.springframework.util.ReflectionUtils;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.Map;
 
 /*
@@ -84,5 +85,11 @@ public class JenkinsHacks {
             throw new RuntimeException(e);
         }
 
+    }
+
+    public static void callPrivateMethod(final Class clazz, final String methodName, final Object target, final Object... args) {
+        final Method method = ReflectionUtils.findMethod(clazz, methodName);
+        method.setAccessible(true);
+        ReflectionUtils.invokeMethod(method, target, args);
     }
 }

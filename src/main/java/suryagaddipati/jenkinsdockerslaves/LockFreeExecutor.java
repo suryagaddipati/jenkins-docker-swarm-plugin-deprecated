@@ -64,6 +64,7 @@ public class LockFreeExecutor extends Executor {
         final List pendings = (List) JenkinsHacks.getPrivateField(Queue.class, "pendings", this.queue);
         final WorkUnit wu = getCurrentWorkUnit();
         pendings.remove(wu.context.item);
+        JenkinsHacks.callPrivateMethod(Queue.class, "updateSnapshot", this.queue);
 
         final Queue.LeftItem li = new Queue.LeftItem(wu.context);
         for (final QueueListener ql : QueueListener.all()) {
