@@ -180,7 +180,7 @@ public class DockerComputer extends AbstractCloudComputer<DockerSlave> {
     }
 
     private void addOneExecutor() {
-        final Executor e = new LockFreeExecutor(this, 0);
+        final Executor e = new Executor(this, 0);
         final List executors = (List) JenkinsHacks.getPrivateField(Computer.class, "executors", this);
         executors.add(e);
     }

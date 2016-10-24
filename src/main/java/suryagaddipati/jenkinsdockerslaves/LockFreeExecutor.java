@@ -34,6 +34,8 @@ public class LockFreeExecutor extends Executor {
             final SubTask task = workUnit.work;
             final Queue.Executable executable = getExecutable(task);
             JenkinsHacks.setPrivateField(Executor.class, "executable", this, executable);
+            JenkinsHacks.setPrivateField(Executor.class, "startTime", this, System.currentTimeMillis());
+
             workUnit.setExecutable(executable);
             if (executable instanceof Actionable) {
                 for (final Action action : workUnit.context.actions) {
