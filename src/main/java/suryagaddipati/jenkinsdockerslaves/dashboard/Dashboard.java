@@ -24,8 +24,6 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -117,7 +115,7 @@ public class Dashboard {
 
     private Object getFuture(final CompletionStage<Object> future) {
         try {
-            final Object result = future.toCompletableFuture().get(5, TimeUnit.SECONDS);
+            final Object result = future.toCompletableFuture().get(); // .get(5, TimeUnit.SECONDS);
             if(result instanceof SerializationException){
                 throw new RuntimeException (((SerializationException)result).getCause());
             }
@@ -125,7 +123,7 @@ public class Dashboard {
                 throw new RuntimeException (((ApiException)result).getCause());
             }
             return result;
-        } catch (InterruptedException|ExecutionException |TimeoutException e) {
+        } catch (InterruptedException|ExecutionException  e) {
             throw  new RuntimeException(e);
         }
     }

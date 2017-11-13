@@ -1,18 +1,19 @@
 
 package suryagaddipati.jenkinsdockerslaves.docker.marshalling;
 
-import akka.http.javadsl.marshalling.Marshaller;
 import akka.http.javadsl.model.HttpEntity;
 import akka.http.javadsl.model.MediaTypes;
-import akka.http.javadsl.model.RequestEntity;
 import akka.http.javadsl.unmarshalling.Unmarshaller;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.type.CollectionType;
+import scala.util.Either;
+import scala.util.Left;
+import scala.util.Right;
+import suryagaddipati.jenkinsdockerslaves.docker.api.response.SerializationException;
 
 import java.io.IOException;
 import java.util.List;
@@ -27,51 +28,36 @@ public class Jackson {
     defaultObjectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,false);
   }
 
-  public static <T> Marshaller<T, RequestEntity> marshaller(ObjectMapper mapper) {
-    return Marshaller.wrapEntity(
-            u -> toJSON(mapper, u),
-            Marshaller.stringToEntity(),
-            MediaTypes.APPLICATION_JSON
-    );
-  }
 
-  public static <T> Unmarshaller<HttpEntity, T> unmarshaller(Class<T> expectedType) {
+  public static  Unmarshaller<HttpEntity, Either<SerializationException,?>> unmarshaller(Class<?> expectedType) {
     return unmarshaller(defaultObjectMapper, expectedType);
   }
 
-  public static <T> Unmarshaller<HttpEntity, T> unmarshaller(ObjectMapper mapper, Class<T> expectedType) {
+  public static  Unmarshaller<HttpEntity, Either<SerializationException,?>> unmarshaller(ObjectMapper mapper, Class<?> expectedType) {
     return Unmarshaller.forMediaType(MediaTypes.APPLICATION_JSON, Unmarshaller.entityToString())
             .thenApply(s -> fromJSON(mapper, s, expectedType));
   }
 
-  private static String toJSON(ObjectMapper mapper, Object object) {
+    private static <T> Either< SerializationException,T>  fromJSON(ObjectMapper mapper, String json, Class<T> expectedType) {
     try {
-      return mapper.writeValueAsString(object);
-    } catch (JsonProcessingException e) {
-      throw new IllegalArgumentException("Cannot marshal to JSON: " + object, e);
-    }
-  }
-
-  private static <T> T fromJSON(ObjectMapper mapper, String json, Class<T> expectedType) {
-    try {
-      return mapper.readerFor(expectedType).readValue(json);
+      return new  Right( mapper.readerFor(expectedType).readValue(json));
     } catch (IOException e) {
-      throw new IllegalArgumentException("Cannot unmarshal JSON as " + expectedType.getSimpleName(), e);
+        return new Left( new SerializationException(e));
     }
   }
 
-  private static <T> T fromJSONArray(ObjectMapper mapper, String json, Class<T> expectedType) {
+  private static <T> Either< SerializationException,T>  fromJSONArray(ObjectMapper mapper, String json, Class<T> expectedType) {
     try {
       CollectionType arrayType = mapper.getTypeFactory()
               .constructCollectionType(List.class, expectedType);
-      return mapper.readerFor(arrayType).readValue(json);
+      return new Right( mapper.readerFor(arrayType).readValue(json));
     } catch (IOException e) {
-      throw new IllegalArgumentException("Cannot unmarshal JSON as " + expectedType.getSimpleName(), e);
+        return new Left( new SerializationException(e));
     }
   }
 
 
-  public static Unmarshaller<HttpEntity,?> unmarshaller(Class<?> responseClass, ResponseType responseType) {
+  public static   Unmarshaller<HttpEntity, Either<SerializationException,?>>  unmarshaller(Class<?> responseClass, ResponseType responseType) {
     if(responseType == ResponseType.CLASS){
       return unmarshaller(responseClass);
     }else {

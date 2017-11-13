@@ -14,7 +14,6 @@ import scala.util.Left;
 import scala.util.Right;
 import suryagaddipati.jenkinsdockerslaves.docker.api.request.ApiRequest;
 import suryagaddipati.jenkinsdockerslaves.docker.api.response.ApiError;
-import suryagaddipati.jenkinsdockerslaves.docker.api.response.ApiException;
 import suryagaddipati.jenkinsdockerslaves.docker.api.response.ApiSuccess;
 import suryagaddipati.jenkinsdockerslaves.docker.api.response.SerializationException;
 import suryagaddipati.jenkinsdockerslaves.docker.marshalling.Jackson;
@@ -33,58 +32,51 @@ public class DockerApiRequest {
         this.apiRequest = request;
     }
 
-    public CompletionStage<Object> execute(){
-        return marshall(apiRequest.getEntity())
-                .thenComposeAsync( marshallResult -> executeRequest( marshallResult, apiRequest.getHttpRequest()))
-                .thenComposeAsync( httpResponse -> marshallResponse(httpResponse))
-                .exceptionally(ex -> new ApiException(apiRequest.getClass(),ex));
-    }
-
-
-    private CompletionStage<Object> marshallResponse(Either<SerializationException, HttpResponse> response) {
-        if(response.isRight()){
-            HttpResponse httpResponse = response.right().get();
-            return httpResponse.status().isFailure()?  handleFailure(httpResponse) : handleSuccess( httpResponse);
+    public CompletionStage<Either<SerializationException, ?>>  execute(){
+        Either<SerializationException, String> marshallResult = marshall(apiRequest.getEntity());
+        if(marshallResult.isRight()){
+            String requestBody = marshallResult.right().get();
+            return executeRequest(requestBody, apiRequest.getHttpRequest()).thenComposeAsync(response -> handleResponse(response));
         }
-        return   CompletableFuture.completedFuture( response.left().get());
+        return  CompletableFuture.completedFuture( marshallResult);
     }
 
-    private CompletionStage<Object> handleSuccess(HttpResponse httpResponse) {
+    private  CompletionStage<Either<SerializationException,?>> handleResponse(HttpResponse response) {
+        return response.status().isFailure() ? handleFailure(response) : handleSuccess(response);
+    }
+
+    private CompletionStage<Either<SerializationException, ?>> handleSuccess(HttpResponse httpResponse) {
         if(apiRequest.getResponseClass() != null){
-            Unmarshaller<HttpEntity, ?> unmarshaller = Jackson.unmarshaller(apiRequest.getResponseClass(), apiRequest.getResponseType());
-            return (CompletionStage<Object>) unmarshaller.unmarshal(httpResponse.entity(),materializer);
+            Unmarshaller<HttpEntity,  Either<SerializationException, ?>> unmarshaller = Jackson.unmarshaller(apiRequest.getResponseClass(), apiRequest.getResponseType());
+            return  unmarshaller.unmarshal(httpResponse.entity(), materializer);
         }else{
             ApiSuccess value = new ApiSuccess(apiRequest.getClass(), httpResponse.entity());
-            return CompletableFuture.completedFuture(value);
+            return CompletableFuture.completedFuture(new Right(value));
         }
     }
 
-    private  CompletionStage<Object> handleFailure(HttpResponse httpResponse) {
+    private  CompletionStage<Either<SerializationException,?>> handleFailure(HttpResponse httpResponse) {
         if(httpResponse.status().intValue() == 500 ){
-           return CompletableFuture.completedFuture(new ApiError(apiRequest.getClass(), httpResponse.status(), httpResponse.entity().toString()));
+            ApiError apiError = new ApiError(apiRequest.getClass(), httpResponse.status(), httpResponse.entity().toString());
+            return CompletableFuture.completedFuture(new Right(apiError));
         }
-        Unmarshaller<HttpEntity, ErrorMessage> unmarshaller = Jackson.unmarshaller(ErrorMessage.class);
-        return  unmarshaller.unmarshal(httpResponse.entity(),materializer).<Object>thenApplyAsync(csr ->
-                new ApiError(apiRequest.getClass(), httpResponse.status(), csr.message)
-        ).exceptionally(throwable -> new SerializationException(throwable) );
+        Unmarshaller<HttpEntity,  Either<SerializationException,?>> unmarshaller = Jackson.unmarshaller(ErrorMessage.class);
+        return  unmarshaller.unmarshal(httpResponse.entity(),materializer).thenApplyAsync(csr ->
+                csr.map(err -> new ApiError(apiRequest.getClass(), httpResponse.status(), ((ErrorMessage)err).message))
+        );
     }
 
-    private CompletionStage<Either<SerializationException,String>> marshall(Object object){
+    private Either<SerializationException,String> marshall(Object object){
         try {
             String jsonString = Jackson.getDefaultObjectMapper().writeValueAsString(object);
-            return CompletableFuture.completedFuture(new Right(jsonString));
+            return new Right(jsonString);
         } catch (JsonProcessingException e) {
-            return CompletableFuture.completedFuture(new Left(new SerializationException(e)));
+            return new Left(new SerializationException(e));
         }
 
     }
-    private CompletionStage<Either<SerializationException, HttpResponse>> executeRequest(Either<SerializationException, String> marshallResult, HttpRequest request) {
-        if(marshallResult.isRight()){
-            String requestEntity = marshallResult.right().get();
-            CompletionStage<HttpResponse> rsp = Http.get(as).singleRequest(request.withEntity(ContentTypes.APPLICATION_JSON, requestEntity), materializer);
-            return rsp.thenApply(rsp1 -> new Right(rsp1));
-        }
-        return CompletableFuture.completedFuture( new Left( marshallResult.left().get()));
+    private CompletionStage< HttpResponse> executeRequest(String requestEntity, HttpRequest request) {
+        return Http.get(as).singleRequest(request.withEntity(ContentTypes.APPLICATION_JSON, requestEntity), materializer);
     }
 
     private static class ErrorMessage{
