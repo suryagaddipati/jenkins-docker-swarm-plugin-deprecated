@@ -6,14 +6,13 @@ import hudson.model.Queue;
 import hudson.model.Run;
 import jenkins.model.Jenkins;
 import net.sf.json.JSONArray;
+import scala.util.Either;
 import suryagaddipati.jenkinsdockerslaves.DockerSlaveInfo;
 import suryagaddipati.jenkinsdockerslaves.DockerSwarmPlugin;
 import suryagaddipati.jenkinsdockerslaves.docker.api.DockerApiRequest;
 import suryagaddipati.jenkinsdockerslaves.docker.api.nodes.ListNodesRequest;
-import suryagaddipati.jenkinsdockerslaves.docker.api.nodes.Node;
 import suryagaddipati.jenkinsdockerslaves.docker.api.response.ApiException;
 import suryagaddipati.jenkinsdockerslaves.docker.api.response.SerializationException;
-import suryagaddipati.jenkinsdockerslaves.docker.api.task.ListTasksRequest;
 import suryagaddipati.jenkinsdockerslaves.docker.api.task.Task;
 
 import java.util.ArrayList;
@@ -24,8 +23,6 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class Dashboard {
     private final List<SwarmNode> nodes;
@@ -90,28 +87,43 @@ public class Dashboard {
         final DockerSwarmPlugin swarmPlugin = Jenkins.getInstance().getPlugin(DockerSwarmPlugin.class);
         final ActorSystem as = swarmPlugin.getActorSystem();
 
-        final CompletionStage<Object> nodesStage = new DockerApiRequest(as, new ListNodesRequest()).execute();
-        final CompletionStage<Object> swarmNodesFuture = nodesStage.thenComposeAsync(nodes -> {
-            if (nodes instanceof List) {
-                final CompletableFuture<Object> tasksFuture = new DockerApiRequest(as, new ListTasksRequest()).execute().toCompletableFuture();
-                return tasksFuture.thenApply(tasks -> {
-                    if(tasks instanceof  List){
-                        final List<Node> nodeList = (List<Node>) nodes;
-                        return nodeList.stream().map(node -> {
-                            Stream<Task> tasksForNode = ((List<Task>) tasks).stream()
-                                    .filter(task -> node.ID.equals(task.NodeID) && task.Spec.getComputerName() != null);
-                            return    new SwarmNode(node, tasksForNode.collect(Collectors.toList()));
-                        }).collect(Collectors.toList());
-                    }
-                    return  CompletableFuture.completedFuture(tasks);
-                });
+        CompletionStage<Either<SerializationException, ?>> nodesStage = new DockerApiRequest(as, new ListNodesRequest()).execute();
+        CompletionStage<Either<SerializationException,?>> swarmNodesFuture = nodesStage.thenComposeAsync(nodesResponse -> {
+            if(nodesResponse.isRight()){
+                return processNodes(as,nodesResponse.right().get());
             }
-            return CompletableFuture.completedFuture(nodes);
+            return CompletableFuture.completedFuture(nodesResponse);
+
+//            Either<SerializationException, ? extends CompletableFuture<?>> x = nodesResponse.map(nodes -> {
+//                return processNodes(as, nodes);
+//            });
+//                final CompletableFuture<?> tasksFuture = processNodes(as, nodes);
+//                if (tasksFuture != null) return tasksFuture;
+//                return CompletableFuture.completedFuture(nodes);
         });
 
-        return (List<SwarmNode>) getFuture(swarmNodesFuture);
+        return (List<SwarmNode>) getFuture(null);
     }
 
+
+    private CompletionStage<Either<SerializationException,?>>  processNodes(ActorSystem as, Object nodes) {
+//        if (nodes instanceof List) {
+//            CompletionStage<Either<SerializationException, ?>> tasksResponse = new DockerApiRequest(as, new ListTasksRequest()).execute();
+//
+//            return tasksFuture.thenApply(tasks -> {
+//                if(tasks instanceof  List){
+//                    final List<Node> nodeList = (List<Node>) nodes;
+//                    return nodeList.stream().map(node -> {
+//                        Stream<Task> tasksForNode = ((List<Task>) tasks).stream()
+//                                .filter(task -> node.ID.equals(task.NodeID) && task.Spec.getComputerName() != null);
+//                        return    new SwarmNode(node, tasksForNode.collect(Collectors.toList()));
+//                    }).collect(Collectors.toList());
+//                }
+//                return  CompletableFuture.completedFuture(tasks);
+//            });
+//        }
+        return null;
+    }
 
     private Object getFuture(final CompletionStage<Object> future) {
         try {

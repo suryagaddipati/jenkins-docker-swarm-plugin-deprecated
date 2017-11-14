@@ -9,7 +9,9 @@ import akka.japi.pf.ReceiveBuilder;
 import akka.stream.ActorMaterializer;
 import org.apache.commons.lang.StringUtils;
 import scala.concurrent.duration.Duration;
-import suryagaddipati.jenkinsdockerslaves.docker.api.DockerApiActor;
+import scala.util.Either;
+import suryagaddipati.jenkinsdockerslaves.docker.api.DockerApiRequest;
+import suryagaddipati.jenkinsdockerslaves.docker.api.nodes.ListNodesRequest;
 import suryagaddipati.jenkinsdockerslaves.docker.api.response.ApiError;
 import suryagaddipati.jenkinsdockerslaves.docker.api.response.ApiException;
 import suryagaddipati.jenkinsdockerslaves.docker.api.response.ApiSuccess;
@@ -21,19 +23,18 @@ import suryagaddipati.jenkinsdockerslaves.docker.api.service.ServiceLogRequest;
 
 import java.io.PrintStream;
 import java.nio.charset.Charset;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class DockerAgentLauncherActor extends AbstractActor {
     private static final Logger LOGGER = Logger.getLogger(DockerAgentLauncherActor.class.getName());
-    private final ActorRef apiActor;
     private PrintStream logger;
     private CreateServiceRequest createRequest;
 
     public DockerAgentLauncherActor(PrintStream logger ) {
         this.logger = logger;
-        this.apiActor = getContext().actorOf(DockerApiActor.props());
     }
 
     public static Props props(PrintStream logger) {
@@ -86,8 +87,9 @@ public class DockerAgentLauncherActor extends AbstractActor {
 
 
     private void createService(CreateServiceRequest createRequest) {
-        this.createRequest = createRequest;
-        apiActor.tell(createRequest,getSelf());
+        this.createRequest = createRequest; // Save, incase we have to replay it again on failure.
+        CompletionStage<Either<SerializationException, ?>> response = new DockerApiRequest(getContext().getSystem(), new ListNodesRequest()).execute();
+//        apiActor.tell(createRequest,getSelf());
     }
 
     private void createServiceSuccess(CreateServiceResponse createServiceResponse) {
@@ -95,7 +97,7 @@ public class DockerAgentLauncherActor extends AbstractActor {
         if(StringUtils.isNotEmpty(createServiceResponse.Warning)){
             logger.println("Service creation warning : " + createServiceResponse.Warning);
         }
-        apiActor.tell(new ServiceLogRequest(createServiceResponse.ID),getSelf());
+//        apiActor.tell(new ServiceLogRequest(createServiceResponse.ID),getSelf());
     }
     private void serviceCreateException(ApiException apiException) {
         apiException.getCause().printStackTrace(this.logger);
@@ -103,7 +105,7 @@ public class DockerAgentLauncherActor extends AbstractActor {
     }
 
     private void deleteService(DeleteServiceRequest deleteServiceRequest) {
-        apiActor.tell(deleteServiceRequest,getSelf());
+//        apiActor.tell(deleteServiceRequest,getSelf());
     }
 
     private void resechedule() {
